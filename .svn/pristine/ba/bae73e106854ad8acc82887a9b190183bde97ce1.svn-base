@@ -1,0 +1,129 @@
+/*
+ * (c) 2022 Bodo Zunker. All rights reserved.
+ * created 12.02.2022
+ */
+package bzr.demo.concurrency.examples;
+
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * @author bodo
+ *
+ */
+class ComplexState
+{
+	private static final int POOL_SIZE = 10;
+	private static final int TEST_SIZE = 10;
+	private static final int COUNT_REPEAT = 10000;
+
+	private final boolean isOpen = false;
+	private final boolean isConnecting = false;
+	private final boolean isDisposed = false;
+
+	private List<String> list = null;
+
+	private final AtomicInteger atomicCounter = new AtomicInteger();
+
+	private final CountDownLatch triggerLatch = new CountDownLatch(
+			(POOL_SIZE < TEST_SIZE ? POOL_SIZE : TEST_SIZE) );
+
+	void happilyNaive()
+	{
+		startAtSameTime();
+
+		if( list == null )
+		{
+			list = new ArrayList<>();
+		}
+		for( int j = 0; j < COUNT_REPEAT; j++ )
+		{
+			list.add( "test" + j );
+		}
+
+		atomicCounter.addAndGet( list.size() );
+		list = null;
+	}
+
+	void butNowWereSaveRight()
+	{
+		startAtSameTime();
+
+		if( list == null )
+		{
+			list = new ArrayList<>();
+		}
+
+		for( int j = 0; j < COUNT_REPEAT; j++ )
+		{
+			if( list != null )
+			{
+				list.add( "test" + j );
+			}
+		}
+
+		if( list != null )
+		{
+			atomicCounter.addAndGet( list.size() );
+		}
+		list = null;
+	}
+
+	void hasToWorkFinally()
+	{
+		startAtSameTime();
+
+		for( int j = 0; j < COUNT_REPEAT; j++ )
+		{
+			if( list == null )
+			{
+				list = new LinkedList<>();
+			}
+			if( list != null )
+			{
+				list.add( "test" + j );
+				atomicCounter.incrementAndGet();
+			}
+		}
+
+		list = null;
+
+	}
+
+	void localOnly()
+	{
+		startAtSameTime();
+
+		for( int j = 0; j < COUNT_REPEAT; j++ )
+		{
+			List<String> listLocal = list;
+			if( listLocal == null )
+			{
+				list = listLocal = new ArrayList<>();// CopyOnWriteArrayList<>();
+			}
+
+			listLocal.add( "test" + j );
+			atomicCounter.incrementAndGet();
+
+		}
+
+		list = null;
+
+	}
+
+	private void startAtSameTime()
+	{
+		triggerLatch.countDown();
+		try
+		{
+			triggerLatch.await();
+		}catch( InterruptedException e )
+		{
+			Thread.currentThread().interrupt();
+		}
+	}
+
+}

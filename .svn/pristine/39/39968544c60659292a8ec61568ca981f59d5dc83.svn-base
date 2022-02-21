@@ -1,0 +1,162 @@
+/*
+ * (c) 2022 Bodo Zunker. All rights reserved.
+ * created 12.02.2022
+ */
+package bzr.demo.concurrency.examples;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * @author bodo
+ *
+ */
+class Performance extends BaseClass
+{
+	static final int POOL_SIZE = 2;
+	static final int TEST_SIZE = 2;
+	static final int REPEAT_COUNT = 10000;
+	static final int LATCH_SIZE = Math.min( POOL_SIZE, TEST_SIZE );
+
+	private List<String> list;
+
+	final AtomicInteger atomicCounter = new AtomicInteger();
+
+	/**
+	 * 
+	 */
+	public Performance()
+	{
+		super( LATCH_SIZE );
+		list = initSampleList();
+	}
+
+	void stringAdditionVs()
+	{
+		startAtSameTime();
+
+		String result = "";
+
+		for( int i = 0; i < REPEAT_COUNT; i++ )
+		{
+			result = result + " test " + i + " ";
+
+			atomicCounter.incrementAndGet();
+		}
+
+	}
+
+	void stringAppend()
+	{
+		startAtSameTime();
+
+		StringBuilder builder = new StringBuilder();
+
+		for( int i = 0; i < REPEAT_COUNT; i++ )
+		{
+
+			builder.append( " test " + i + " " );
+			builder.append( i );
+			builder.append( " " );
+
+			atomicCounter.incrementAndGet();
+		}
+
+	}
+
+	void streamFindFirstVs()
+	{
+		startAtSameTime();
+
+		List<String> source = list;
+
+		for( int i = 0; i < REPEAT_COUNT; i++ )
+		{// new ArrayList<>( source);
+			final String find = getFind( i );
+			source.stream().filter( s -> s.equals( find ) ).findFirst();
+			atomicCounter.incrementAndGet();
+		}
+
+		list = null;
+	}
+
+	String getFind( final int i )
+	{
+		return "test" + i / 2;
+	}
+
+	void parallelStreamFindFirstVs()
+	{
+		startAtSameTime();
+
+		List<String> source = list;
+
+		for( int i = 0; i < REPEAT_COUNT; i++ )
+		{// new ArrayList<>( );
+			final String find = getFind( i );
+			source.parallelStream().filter( s -> s.equals( find ) ).findFirst();
+			atomicCounter.incrementAndGet();
+		}
+
+		list = null;
+	}
+
+	void normalForEachFindFirst()
+	{
+		startAtSameTime();
+
+		List<String> source = list;
+
+		for( int i = 0; i < REPEAT_COUNT; i++ )
+		{
+			String find = getFind( i );
+			for( String string : source )
+			{
+				if( string.equals( find ) )
+				{
+					break;
+				}
+			}
+			atomicCounter.incrementAndGet();
+
+		}
+
+		list = null;
+	}
+
+	void streamNestedForEachVs()
+	{
+
+	}
+
+	void parallelStreamNestedFoerEachVs()
+	{
+
+	}
+
+	void normalForEach()
+	{
+
+	}
+
+	void heapLitteringVs()
+	{
+
+	}
+
+	void objectReuse()
+	{
+
+	}
+
+	private List<String> initSampleList()
+	{
+		CopyOnWriteArrayList<String> source = new CopyOnWriteArrayList<>();
+		for( int i = 0; i < REPEAT_COUNT; i++ )
+		{
+			source.add( "test" + i );
+		}
+		return source;
+	}
+}

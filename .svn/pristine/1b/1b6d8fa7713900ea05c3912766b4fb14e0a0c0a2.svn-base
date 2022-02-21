@@ -1,0 +1,300 @@
+/*
+ * (c) 2022 Bodo Zunker. All rights reserved.
+ * created 08.02.2022
+ */
+package bzr.demo.concurrency.examples;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+
+/**
+ * @author bodo
+ *
+ */
+@TestMethodOrder( OrderAnnotation.class )
+class StableStateTest
+{
+
+	/**
+	 * 
+	 */
+	private static final int POOL_SIZE = 10;
+	private static final int TEST_SIZE = 10;
+	private static final int COUNT_REPEAT = 10000;
+
+	private static ExecutorService pool;
+
+	private ComplexState complexStateInstance;
+
+	private ArrayList<Future<?>> futures;
+	private long startTimeNs;
+
+	static class ComplexState
+	{
+
+		private final boolean isOpen = false;
+		private final boolean isConnecting = false;
+		private final boolean isDisposed = false;
+
+		private List<String> list = null;
+
+		private final AtomicInteger atomicCounter = new AtomicInteger();
+
+		private final CountDownLatch triggerLatch = new CountDownLatch(
+				(POOL_SIZE < TEST_SIZE ? POOL_SIZE : TEST_SIZE) );
+
+		void happilyNaive()
+		{
+			startAtSameTime();
+
+			if( list == null )
+			{
+				list = new ArrayList<>();
+			}
+			for( int j = 0; j < COUNT_REPEAT; j++ )
+			{
+				list.add( "test" + j );
+			}
+
+			atomicCounter.addAndGet( list.size() );
+			list = null;
+		}
+
+		void butNowWereSaveRight()
+		{
+			startAtSameTime();
+
+			if( list == null )
+			{
+				list = new ArrayList<>();
+			}
+
+			for( int j = 0; j < COUNT_REPEAT; j++ )
+			{
+				if( list != null )
+				{
+					list.add( "test" + j );
+				}
+			}
+
+			if( list != null )
+			{
+				atomicCounter.addAndGet( list.size() );
+			}
+			list = null;
+		}
+
+		void hasToWorkFinally()
+		{
+			startAtSameTime();
+
+			for( int j = 0; j < COUNT_REPEAT; j++ )
+			{
+				if( list == null )
+				{
+					list = new LinkedList<>();
+				}
+				if( list != null )
+				{
+					list.add( "test" + j );
+					atomicCounter.incrementAndGet();
+				}
+			}
+
+			list = null;
+
+		}
+
+		void localOnly()
+		{
+			startAtSameTime();
+
+			for( int j = 0; j < COUNT_REPEAT; j++ )
+			{
+				List<String> listLocal = list;
+				if( listLocal == null )
+				{
+					list = listLocal = new ArrayList<>();// CopyOnWriteArrayList<>();
+				}
+
+				listLocal.add( "test" + j );
+				atomicCounter.incrementAndGet();
+
+			}
+
+			list = null;
+
+		}
+
+		private void startAtSameTime()
+		{
+			triggerLatch.countDown();
+			try
+			{
+				triggerLatch.await();
+			}catch( InterruptedException e )
+			{
+				Thread.currentThread().interrupt();
+			}
+		}
+
+	}
+
+	@BeforeAll
+	static void setup()
+	{
+		pool = Executors.newFixedThreadPool( POOL_SIZE );
+		for( int i = 0; i < POOL_SIZE; i++ )
+		{
+			pool.submit( () -> {
+				try
+				{
+					Thread.sleep( 10, 100 );
+				}catch( InterruptedException e )
+				{
+					Thread.currentThread().interrupt();
+				}
+			} );
+
+		}
+	}
+
+	@BeforeEach
+	void initEveryTest()
+	{
+		complexStateInstance = new ComplexState();
+		futures = new ArrayList<>();
+		System.out.println( "" );
+		startTimeNs = System.nanoTime();
+	}
+
+	@AfterEach
+	void afterEveryTest()
+	{
+		System.out.println( "Dauer: " + (System.nanoTime() - startTimeNs) / 1000L + " μs" );
+		System.out.println( "" );
+	}
+
+	@AfterAll
+	static void shutdown()
+	{
+		pool.shutdown();
+	}
+
+	/**
+	 * @throws ExecutionException
+	 * @throws InterruptedException
+	 * 
+	 */
+	private void waitForFuture() throws ExecutionException
+	{
+		ExecutionException lastEx = null;
+		for( Future<?> future : futures )
+		{
+			try
+			{
+				future.get();
+			}catch( InterruptedException e )
+			{
+				Thread.currentThread().interrupt();
+			}catch( ExecutionException e )
+			{
+				System.out.println( e.toString() );
+				lastEx = e;
+			}
+		}
+		if( lastEx != null )
+			throw lastEx;
+	}
+
+	@Test
+	@Order( 1 )
+	@Disabled
+	void happilyNaive() throws ExecutionException
+	{
+		System.out.println( "happilyNaive" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( complexStateInstance::happilyNaive ) );
+		}
+		System.out.println( "inbetween: " + complexStateInstance.atomicCounter.get() );
+
+		waitForFuture();
+
+		System.out.println( "result: " + complexStateInstance.atomicCounter.get() );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, complexStateInstance.atomicCounter.get() );
+	}
+
+	@Test
+	@Order( 2 )
+	@Disabled
+	void butNowWereSaveRight() throws ExecutionException
+	{
+		System.out.println( "butNowWe'reSaveRight" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( complexStateInstance::butNowWereSaveRight ) );
+		}
+		System.out.println( "inbetween: " + complexStateInstance.atomicCounter.get() );
+
+		waitForFuture();
+
+		System.out.println( "result: " + complexStateInstance.atomicCounter.get() );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, complexStateInstance.atomicCounter.get() );
+	}
+
+	@Test
+	@Order( 3 )
+	@Disabled
+	void hasToWorkFinally() throws ExecutionException
+	{
+		System.out.println( "hasToWorkFinally" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( complexStateInstance::hasToWorkFinally ) );
+		}
+		System.out.println( "inbetween: " + complexStateInstance.atomicCounter.get() );
+
+		waitForFuture();
+
+		System.out.println( "result: " + complexStateInstance.atomicCounter.get() );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, complexStateInstance.atomicCounter.get() );
+	}
+
+	@Test
+	@Order( 4 )
+	void localOnly() throws ExecutionException
+	{
+		System.out.println( "localOnly" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( complexStateInstance::localOnly ) );
+		}
+		System.out.println( "inbetween: " + complexStateInstance.atomicCounter.get() );
+
+		waitForFuture();
+
+		System.out.println( "result: " + complexStateInstance.atomicCounter.get() );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, complexStateInstance.atomicCounter.get() );
+	}
+
+}

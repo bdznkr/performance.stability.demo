@@ -1,0 +1,93 @@
+/*
+ * (c) 2022 Bodo Zunker. All rights reserved.
+ * created 12.02.2022
+ */
+package bzr.demo.concurrency.examples;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * @author bodo
+ *
+ */
+class ExampleClass
+{
+	private static final int POOL_SIZE = 10;
+	private static final int TEST_SIZE = 1;
+	private static final int COUNT_REPEAT = 1000;
+
+	int unprotectedCounter = 0;
+	volatile int volatileCounter = 0;
+	final AtomicInteger atomicCounter = new AtomicInteger();
+
+	final CountDownLatch triggerLatch = new CountDownLatch( (POOL_SIZE < TEST_SIZE ? POOL_SIZE : TEST_SIZE) );
+
+	/**
+	 * @return
+	 */
+	void countUpUnprotected()
+	{
+		for( int i = 0; i < COUNT_REPEAT; i++ )
+		{
+			unprotectedCounter = unprotectedCounter + 1;
+		}
+		System.out.println( unprotectedCounter + "\t\t " + Thread.currentThread().getName() );
+	}
+
+	/**
+	 * @return
+	 */
+	void countUpSynchronized()
+	{
+		for( int i = 0; i < COUNT_REPEAT; i++ )
+		{
+			synchronized( this )
+			{
+				unprotectedCounter = unprotectedCounter + 1;
+			}
+		}
+		System.out.println( unprotectedCounter + "\t\t " + Thread.currentThread().getName() );
+	}
+
+	/**
+	 * @return
+	 */
+	void countUpVolatile()
+	{
+		for( int i = 0; i < COUNT_REPEAT; i++ )
+		{
+			volatileCounter = volatileCounter + 1;
+		}
+
+		System.out.println( volatileCounter + "\t\t " + Thread.currentThread().getName() );
+	}
+
+	void countUpAtomic()
+	{
+		int last = 0;
+		for( int i = 0; i < COUNT_REPEAT; i++ )
+		{
+			last = atomicCounter.incrementAndGet();
+		}
+
+		System.out.println( last + "\t\t " + Thread.currentThread().getName() );
+	}
+
+	void countLatched( final Runnable counter )
+	{
+		triggerLatch.countDown();
+
+		try
+		{
+			triggerLatch.await();
+
+			counter.run();
+
+		}catch( InterruptedException e )
+		{
+			Thread.currentThread().interrupt();
+		}
+	}
+
+}

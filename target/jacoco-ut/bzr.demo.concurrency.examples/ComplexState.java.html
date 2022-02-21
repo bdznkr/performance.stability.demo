@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="de"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ComplexState.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">concurrency.examples</a> &gt; <a href="index.source.html" class="el_package">bzr.demo.concurrency.examples</a> &gt; <span class="el_source">ComplexState.java</span></div><h1>ComplexState.java</h1><pre class="source lang-java linenums">/*
+ * (c) 2022 Bodo Zunker. All rights reserved.
+ * created 12.02.2022
+ */
+package bzr.demo.concurrency.examples;
+
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * @author bodo
+ *
+ */
+<span class="nc" id="L20">class ComplexState</span>
+{
+	private static final int POOL_SIZE = 10;
+	private static final int TEST_SIZE = 10;
+	private static final int COUNT_REPEAT = 100;
+
+<span class="nc" id="L26">	private List&lt;String&gt; list = null;</span>
+
+<span class="nc" id="L28">	private final AtomicInteger atomicCounter = new AtomicInteger();</span>
+
+<span class="nc" id="L30">	private final CountDownLatch triggerLatch = new CountDownLatch(</span>
+			(POOL_SIZE &lt; TEST_SIZE ? POOL_SIZE : TEST_SIZE) );
+
+	void happilyNaive()
+	{
+<span class="nc" id="L35">		startAtSameTime();</span>
+
+<span class="nc" id="L37">		initArray();</span>
+<span class="nc bnc" id="L38" title="All 2 branches missed.">		for( int j = 0; j &lt; COUNT_REPEAT; j++ )</span>
+		{
+<span class="nc" id="L40">			list.add( &quot;test&quot; + j );</span>
+		}
+
+<span class="nc" id="L43">		atomicCounter.addAndGet( list.size() );</span>
+<span class="nc" id="L44">		list = null;</span>
+<span class="nc" id="L45">	}</span>
+
+	void initArray()
+	{
+<span class="nc bnc" id="L49" title="All 2 branches missed.">		if( list == null )</span>
+		{
+<span class="nc" id="L51">			list = new ArrayList&lt;&gt;();</span>
+		}
+<span class="nc" id="L53">	}</span>
+
+	void butNowWereSaveRight()
+	{
+<span class="nc" id="L57">		startAtSameTime();</span>
+
+<span class="nc" id="L59">		initArray();</span>
+
+<span class="nc bnc" id="L61" title="All 2 branches missed.">		for( int j = 0; j &lt; COUNT_REPEAT; j++ )</span>
+		{
+<span class="nc bnc" id="L63" title="All 2 branches missed.">			if( list != null )</span>
+			{
+<span class="nc" id="L65">				list.add( &quot;test&quot; + j );</span>
+			}
+		}
+
+<span class="nc bnc" id="L69" title="All 2 branches missed.">		if( list != null )</span>
+		{
+<span class="nc" id="L71">			atomicCounter.addAndGet( list.size() );</span>
+		}
+<span class="nc" id="L73">		list = null;</span>
+<span class="nc" id="L74">	}</span>
+
+	void hasToWorkFinally()
+	{
+<span class="nc" id="L78">		startAtSameTime();</span>
+
+<span class="nc bnc" id="L80" title="All 2 branches missed.">		for( int j = 0; j &lt; COUNT_REPEAT; j++ )</span>
+		{
+<span class="nc bnc" id="L82" title="All 2 branches missed.">			if( list == null )</span>
+			{
+<span class="nc" id="L84">				list = new LinkedList&lt;&gt;();</span>
+			}
+<span class="nc bnc" id="L86" title="All 2 branches missed.">			if( list != null )</span>
+			{
+<span class="nc" id="L88">				list.add( &quot;test&quot; + j );</span>
+<span class="nc" id="L89">				atomicCounter.incrementAndGet();</span>
+			}
+		}
+
+<span class="nc" id="L93">		list = null;</span>
+
+<span class="nc" id="L95">	}</span>
+
+	void localOnly()
+	{
+<span class="nc" id="L99">		startAtSameTime();</span>
+
+<span class="nc bnc" id="L101" title="All 2 branches missed.">		for( int j = 0; j &lt; COUNT_REPEAT; j++ )</span>
+		{
+<span class="nc" id="L103">			List&lt;String&gt; listLocal = list;</span>
+<span class="nc bnc" id="L104" title="All 2 branches missed.">			if( listLocal == null )</span>
+			{
+<span class="nc" id="L106">				list = listLocal = new ArrayList&lt;&gt;();// CopyOnWriteArrayList&lt;&gt;();</span>
+			}
+
+<span class="nc" id="L109">			listLocal.add( &quot;test&quot; + j );</span>
+<span class="nc" id="L110">			atomicCounter.incrementAndGet();</span>
+
+		}
+
+<span class="nc" id="L114">		list = null;</span>
+
+<span class="nc" id="L116">	}</span>
+
+	private void startAtSameTime()
+	{
+<span class="nc" id="L120">		triggerLatch.countDown();</span>
+		try
+		{
+<span class="nc" id="L123">			triggerLatch.await();</span>
+<span class="nc" id="L124">		}catch( InterruptedException e )</span>
+		{
+<span class="nc" id="L126">			Thread.currentThread().interrupt();</span>
+<span class="nc" id="L127">		}</span>
+<span class="nc" id="L128">	}</span>
+
+	public static void main( final String[] args )
+	{
+
+<span class="nc" id="L133">		ExecutorService pool = Executors.newFixedThreadPool( POOL_SIZE );</span>
+<span class="nc bnc" id="L134" title="All 2 branches missed.">		for( int i = 0; i &lt; POOL_SIZE; i++ )</span>
+		{
+<span class="nc" id="L136">			pool.submit( () -&gt; {</span>
+				try
+				{
+<span class="nc" id="L139">					Thread.sleep( 10, 100 );</span>
+<span class="nc" id="L140">				}catch( InterruptedException e )</span>
+				{
+<span class="nc" id="L142">					Thread.currentThread().interrupt();</span>
+<span class="nc" id="L143">				}</span>
+<span class="nc" id="L144">			} );</span>
+
+		}
+
+<span class="nc" id="L148">		ComplexState complexStateInstance = new ComplexState();</span>
+<span class="nc" id="L149">		ArrayList&lt;Future&lt;?&gt;&gt; futures = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L150">		System.out.println( &quot;&quot; );</span>
+
+<span class="nc" id="L152">		System.out.println( &quot;happilyNaive&quot; );</span>
+<span class="nc bnc" id="L153" title="All 2 branches missed.">		for( int i = 0; i &lt; TEST_SIZE; i++ )</span>
+		{
+<span class="nc" id="L155">			futures.add( pool.submit( complexStateInstance::happilyNaive ) );</span>
+		}
+<span class="nc" id="L157">		System.out.println( &quot;inbetween: &quot; + complexStateInstance.atomicCounter.get() );</span>
+
+		// waitForFuture();
+
+<span class="nc" id="L161">		System.out.println( &quot;result: &quot; + complexStateInstance.atomicCounter.get() );</span>
+		// assertEquals( TEST_SIZE * COUNT_REPEAT,
+		// complexStateInstance.atomicCounter.get() );
+
+<span class="nc" id="L165">		System.out.println( &quot;butNowWe'reSaveRight&quot; );</span>
+<span class="nc bnc" id="L166" title="All 2 branches missed.">		for( int i = 0; i &lt; TEST_SIZE; i++ )</span>
+		{
+<span class="nc" id="L168">			futures.add( pool.submit( complexStateInstance::butNowWereSaveRight ) );</span>
+		}
+<span class="nc" id="L170">		System.out.println( &quot;inbetween: &quot; + complexStateInstance.atomicCounter.get() );</span>
+
+		// waitForFuture();
+
+<span class="nc" id="L174">		System.out.println( &quot;result: &quot; + complexStateInstance.atomicCounter.get() );</span>
+		// assertEquals( TEST_SIZE * COUNT_REPEAT,
+		// complexStateInstance.atomicCounter.get() );
+
+<span class="nc" id="L178">		System.out.println( &quot;hasToWorkFinally&quot; );</span>
+<span class="nc bnc" id="L179" title="All 2 branches missed.">		for( int i = 0; i &lt; TEST_SIZE; i++ )</span>
+		{
+<span class="nc" id="L181">			futures.add( pool.submit( complexStateInstance::hasToWorkFinally ) );</span>
+		}
+<span class="nc" id="L183">		System.out.println( &quot;inbetween: &quot; + complexStateInstance.atomicCounter.get() );</span>
+
+		// waitForFuture();
+
+<span class="nc" id="L187">		System.out.println( &quot;result: &quot; + complexStateInstance.atomicCounter.get() );</span>
+		// assertEquals( TEST_SIZE * COUNT_REPEAT,
+		// complexStateInstance.atomicCounter.get() );
+
+<span class="nc" id="L191">		System.out.println( &quot;localOnly&quot; );</span>
+<span class="nc bnc" id="L192" title="All 2 branches missed.">		for( int i = 0; i &lt; TEST_SIZE; i++ )</span>
+		{
+<span class="nc" id="L194">			futures.add( pool.submit( complexStateInstance::localOnly ) );</span>
+		}
+<span class="nc" id="L196">		System.out.println( &quot;inbetween: &quot; + complexStateInstance.atomicCounter.get() );</span>
+
+		// waitForFuture();
+
+<span class="nc" id="L200">		System.out.println( &quot;result: &quot; + complexStateInstance.atomicCounter.get() );</span>
+		// assertEquals( TEST_SIZE * COUNT_REPEAT,
+		// complexStateInstance.atomicCounter.get() );
+<span class="nc" id="L203">	}</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.7.202105040129</span></div></body></html>

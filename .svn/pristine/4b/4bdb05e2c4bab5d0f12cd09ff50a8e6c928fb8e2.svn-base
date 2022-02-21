@@ -1,0 +1,204 @@
+/*
+ * (c) 2022 Bodo Zunker. All rights reserved.
+ * created 12.02.2022
+ */
+package bzr.demo.concurrency.examples;
+
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * @author bodo
+ *
+ */
+class ComplexState
+{
+	private static final int POOL_SIZE = 10;
+	private static final int TEST_SIZE = 10;
+	private static final int COUNT_REPEAT = 100;
+
+	private List<String> list = null;
+
+	private final AtomicInteger atomicCounter = new AtomicInteger();
+
+	private final CountDownLatch triggerLatch = new CountDownLatch(
+			(POOL_SIZE < TEST_SIZE ? POOL_SIZE : TEST_SIZE) );
+
+	void happilyNaive()
+	{
+		startAtSameTime();
+
+		initArray();
+		for( int j = 0; j < COUNT_REPEAT; j++ )
+		{
+			list.add( "test" + j );
+		}
+
+		atomicCounter.addAndGet( list.size() );
+		list = null;
+	}
+
+	void initArray()
+	{
+		if( list == null )
+		{
+			list = new ArrayList<>();
+		}
+	}
+
+	void butNowWereSaveRight()
+	{
+		startAtSameTime();
+
+		initArray();
+
+		for( int j = 0; j < COUNT_REPEAT; j++ )
+		{
+			if( list != null )
+			{
+				list.add( "test" + j );
+			}
+		}
+
+		if( list != null )
+		{
+			atomicCounter.addAndGet( list.size() );
+		}
+		list = null;
+	}
+
+	void hasToWorkFinally()
+	{
+		startAtSameTime();
+
+		for( int j = 0; j < COUNT_REPEAT; j++ )
+		{
+			if( list == null )
+			{
+				list = new LinkedList<>();
+			}
+			if( list != null )
+			{
+				list.add( "test" + j );
+				atomicCounter.incrementAndGet();
+			}
+		}
+
+		list = null;
+
+	}
+
+	void localOnly()
+	{
+		startAtSameTime();
+
+		for( int j = 0; j < COUNT_REPEAT; j++ )
+		{
+			List<String> listLocal = list;
+			if( listLocal == null )
+			{
+				list = listLocal = new ArrayList<>();// CopyOnWriteArrayList<>();
+			}
+
+			listLocal.add( "test" + j );
+			atomicCounter.incrementAndGet();
+
+		}
+
+		list = null;
+
+	}
+
+	private void startAtSameTime()
+	{
+		triggerLatch.countDown();
+		try
+		{
+			triggerLatch.await();
+		}catch( InterruptedException e )
+		{
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	public static void main( final String[] args )
+	{
+
+		ExecutorService pool = Executors.newFixedThreadPool( POOL_SIZE );
+		for( int i = 0; i < POOL_SIZE; i++ )
+		{
+			pool.submit( () -> {
+				try
+				{
+					Thread.sleep( 10, 100 );
+				}catch( InterruptedException e )
+				{
+					Thread.currentThread().interrupt();
+				}
+			} );
+
+		}
+
+		ComplexState complexStateInstance = new ComplexState();
+		ArrayList<Future<?>> futures = new ArrayList<>();
+		System.out.println( "" );
+
+		System.out.println( "happilyNaive" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( complexStateInstance::happilyNaive ) );
+		}
+		System.out.println( "inbetween: " + complexStateInstance.atomicCounter.get() );
+
+		// waitForFuture();
+
+		System.out.println( "result: " + complexStateInstance.atomicCounter.get() );
+		// assertEquals( TEST_SIZE * COUNT_REPEAT,
+		// complexStateInstance.atomicCounter.get() );
+
+		System.out.println( "butNowWe'reSaveRight" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( complexStateInstance::butNowWereSaveRight ) );
+		}
+		System.out.println( "inbetween: " + complexStateInstance.atomicCounter.get() );
+
+		// waitForFuture();
+
+		System.out.println( "result: " + complexStateInstance.atomicCounter.get() );
+		// assertEquals( TEST_SIZE * COUNT_REPEAT,
+		// complexStateInstance.atomicCounter.get() );
+
+		System.out.println( "hasToWorkFinally" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( complexStateInstance::hasToWorkFinally ) );
+		}
+		System.out.println( "inbetween: " + complexStateInstance.atomicCounter.get() );
+
+		// waitForFuture();
+
+		System.out.println( "result: " + complexStateInstance.atomicCounter.get() );
+		// assertEquals( TEST_SIZE * COUNT_REPEAT,
+		// complexStateInstance.atomicCounter.get() );
+
+		System.out.println( "localOnly" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( complexStateInstance::localOnly ) );
+		}
+		System.out.println( "inbetween: " + complexStateInstance.atomicCounter.get() );
+
+		// waitForFuture();
+
+		System.out.println( "result: " + complexStateInstance.atomicCounter.get() );
+		// assertEquals( TEST_SIZE * COUNT_REPEAT,
+		// complexStateInstance.atomicCounter.get() );
+	}
+}

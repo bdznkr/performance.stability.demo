@@ -1,0 +1,318 @@
+/*
+ * (c) 2022 Bodo Zunker. All rights reserved.
+ * created 08.02.2022
+ */
+package bzr.demo.concurrency.examples;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+
+/**
+ * @author bodo
+ *
+ */
+@TestMethodOrder( OrderAnnotation.class )
+class VolatileTest
+{
+
+	/**
+	 * 
+	 */
+	private static final int POOL_SIZE = 10;
+	private static final int TEST_SIZE = 1;
+	private static final int COUNT_REPEAT = 1000;
+
+	private static ExecutorService pool;
+
+	private ExampleClass exampleInstance;
+
+	private ArrayList<Future<?>> futures;
+	private long startTimeNs;
+
+	static class ExampleClass
+	{
+
+		private int unprotectedCounter = 0;
+		private volatile int volatileCounter = 0;
+		private final AtomicInteger atomicCounter = new AtomicInteger();
+
+		private final CountDownLatch triggerLatch = new CountDownLatch(
+				(POOL_SIZE < TEST_SIZE ? POOL_SIZE : TEST_SIZE) );
+
+		/**
+		 * @return
+		 */
+		void countUpUnprotected()
+		{
+			for( int i = 0; i < COUNT_REPEAT; i++ )
+			{
+				unprotectedCounter = unprotectedCounter + 1;
+			}
+			System.out.println( unprotectedCounter + "\t\t " + Thread.currentThread().getName() );
+		}
+
+		/**
+		 * @return
+		 */
+		void countUpSynchronized()
+		{
+			for( int i = 0; i < COUNT_REPEAT; i++ )
+			{
+				synchronized( this )
+				{
+					unprotectedCounter = unprotectedCounter + 1;
+				}
+			}
+			System.out.println( unprotectedCounter + "\t\t " + Thread.currentThread().getName() );
+		}
+
+		/**
+		 * @return
+		 */
+		void countUpVolatile()
+		{
+			for( int i = 0; i < COUNT_REPEAT; i++ )
+			{
+				volatileCounter = volatileCounter + 1;
+			}
+
+			System.out.println( volatileCounter + "\t\t " + Thread.currentThread().getName() );
+		}
+
+		void countUpAtomic()
+		{
+			int last = 0;
+			for( int i = 0; i < COUNT_REPEAT; i++ )
+			{
+				last = atomicCounter.incrementAndGet();
+			}
+
+			System.out.println( last + "\t\t " + Thread.currentThread().getName() );
+		}
+
+		void countLatched( final Runnable counter )
+		{
+			triggerLatch.countDown();
+
+			try
+			{
+				triggerLatch.await();
+
+				counter.run();
+
+			}catch( InterruptedException e )
+			{
+				Thread.currentThread().interrupt();
+			}
+		}
+
+	}
+
+	@BeforeAll
+	static void setup()
+	{
+		pool = Executors.newFixedThreadPool( POOL_SIZE );
+		for( int i = 0; i < POOL_SIZE; i++ )
+		{
+			pool.submit( () -> {
+				try
+				{
+					Thread.sleep( 10, 100 );
+				}catch( InterruptedException e )
+				{
+					Thread.currentThread().interrupt();
+				}
+			} );
+
+		}
+	}
+
+	@BeforeEach
+	void initEveryTest()
+	{
+		exampleInstance = new ExampleClass();
+		futures = new ArrayList<>();
+		System.out.println( "" );
+		startTimeNs = System.nanoTime();
+	}
+
+	@AfterEach
+	void afterEveryTest()
+	{
+		System.out.println( "Dauer: " + (System.nanoTime() - startTimeNs) / 1000L + " μs" );
+		System.out.println( "" );
+	}
+
+	@AfterAll
+	static void shutdown()
+	{
+		pool.shutdown();
+	}
+
+	/**
+	 * 
+	 */
+	private void waitForFuture()
+	{
+		try
+		{
+			for( Future<?> future : futures )
+			{
+				future.get();
+			}
+		}catch( Exception e )
+		{
+			e.printStackTrace();
+		}
+	}
+
+	@Test
+	@Order( 1 )
+	void countUnprotected()
+	{
+		System.out.println( "countUnprotected" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( exampleInstance::countUpUnprotected ) );
+
+		}
+		System.out.println( "inbetween: " + exampleInstance.unprotectedCounter );
+
+		waitForFuture();
+
+		System.out.println( "result: " + exampleInstance.unprotectedCounter );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, exampleInstance.unprotectedCounter );
+	}
+
+	@Test
+	@Order( 2 )
+	void countUnprotected2()
+	{
+		System.out.println( "countUnprotected2" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( exampleInstance::countUpUnprotected ) );
+
+		}
+		System.out.println( "inbetween: " + exampleInstance.unprotectedCounter );
+
+		waitForFuture();
+
+		System.out.println( "result: " + exampleInstance.unprotectedCounter );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, exampleInstance.unprotectedCounter );
+	}
+
+	@Test
+	@Order( 3 )
+	void countSynchronized()
+	{
+		System.out.println( "countUpSynchronized" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( exampleInstance::countUpSynchronized ) );
+
+		}
+		System.out.println( "inbetween: " + exampleInstance.unprotectedCounter );
+
+		waitForFuture();
+
+		System.out.println( "result: " + exampleInstance.unprotectedCounter );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, exampleInstance.unprotectedCounter );
+	}
+
+	@Test
+	@Order( 4 )
+	void countVolatile()
+	{
+		System.out.println( "countVolatile" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( exampleInstance::countUpVolatile ) );
+
+		}
+		System.out.println( "inbetween: " + exampleInstance.volatileCounter );
+		waitForFuture();
+		System.out.println( "result: " + exampleInstance.volatileCounter );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, exampleInstance.volatileCounter );
+	}
+
+	@Test
+	@Order( 5 )
+	void countAtomic()
+	{
+		System.out.println( "countAtomic" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( exampleInstance::countUpAtomic ) );
+
+		}
+		System.out.println( "inbetween: " + exampleInstance.atomicCounter.get() );
+		waitForFuture();
+		System.out.println( "result: " + exampleInstance.atomicCounter.get() );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, exampleInstance.atomicCounter.get() );
+	}
+
+	@Test
+	@Order( 6 )
+	void countUnprotectedLatched()
+	{
+		System.out.println( "countUnprotectedLatched" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( () -> exampleInstance.countLatched( exampleInstance::countUpUnprotected ) ) );
+
+		}
+		System.out.println( "inbetween: " + exampleInstance.unprotectedCounter );
+		waitForFuture();
+		System.out.println( "result: " + exampleInstance.unprotectedCounter );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, exampleInstance.unprotectedCounter );
+	}
+
+	@Test
+	@Order( 7 )
+	void countVolatileLatched()
+	{
+		System.out.println( "countVolatileLatched" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( () -> exampleInstance.countLatched( exampleInstance::countUpVolatile ) ) );
+
+		}
+		System.out.println( "inbetween: " + exampleInstance.volatileCounter );
+		waitForFuture();
+		System.out.println( "result: " + exampleInstance.volatileCounter );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, exampleInstance.volatileCounter );
+	}
+
+	@Test
+	@Order( 8 )
+	void countAtomicLatched()
+	{
+		System.out.println( "countAtomicLatched" );
+		for( int i = 0; i < TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( () -> exampleInstance.countLatched( exampleInstance::countUpAtomic ) ) );
+
+		}
+		System.out.println( "inbetween: " + exampleInstance.atomicCounter.get() );
+		waitForFuture();
+		System.out.println( "result: " + exampleInstance.atomicCounter.get() );
+		assertEquals( TEST_SIZE * COUNT_REPEAT, exampleInstance.atomicCounter.get() );
+	}
+
+}

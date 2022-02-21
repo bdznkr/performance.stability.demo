@@ -1,0 +1,22 @@
+/*
+ * (c) 2022 Bodo Zunker. All rights reserved.
+ * created 14.02.2022
+ */
+package bzr.demo.concurrency.examples;
+
+import org.junit.jupiter.api.Test;
+
+/**
+ * @author bodo
+ *
+ */
+class MasterClassTest
+{
+
+	@Test
+	void test()
+	{
+		MasterClass.runTests();
+	}
+
+}
