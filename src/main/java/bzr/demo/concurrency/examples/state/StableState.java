@@ -94,4 +94,26 @@ class StableState extends BaseClass
 
 		list = null;
 	}
+
+	void useLocal()
+	{
+		startAtSameTime();
+
+		for( int j = 0; j < REPEAT_COUNT; j++ )
+		{
+			List<String> listLocal = list;
+			while( listLocal == null )
+			{
+				list = new ArrayList<>();
+				listLocal = list;
+			}
+			// synchronized( listLocal )
+			{
+				listLocal.add( "test" + j );
+			}
+			atomicCounter.incrementAndGet();
+		}
+
+		list = null;
+	}
 }

@@ -108,4 +108,22 @@ class StableStateTest extends Base
 				complexStateInstance.atomicCounter.get() );
 	}
 
+	@Test
+	@Order( 4 )
+	void useLocal()
+	{
+		Logger.info( "useLocal" );
+		for( int i = 0; i < StableState.TEST_SIZE; i++ )
+		{
+			futures.add( pool.submit( complexStateInstance::useLocal ) );
+		}
+		Logger.info( "inbetween: " + complexStateInstance.atomicCounter.get() );
+
+		waitForFuture();
+
+		Logger.info( "result: " + complexStateInstance.atomicCounter.get() );
+		assertEquals( StableState.TEST_SIZE * StableState.REPEAT_COUNT,
+				complexStateInstance.atomicCounter.get() );
+	}
+
 }
